@@ -96,12 +96,12 @@ typedef struct {
 
 - (void)scrollViewDidEndDecelerating:(UIScrollView *)scrollView
 {
-  [[_listAdapter delegateProxy] scrollViewDidEndDecelerating:scrollView];
+  [(id<UIScrollViewDelegate>)[_listAdapter performSelector:@selector(delegateProxy)] scrollViewDidEndDecelerating:scrollView];
 }
 
 - (void)scrollViewDidEndScrollingAnimation:(UIScrollView *)scrollView
 {
-  [[_listAdapter delegateProxy] scrollViewDidEndScrollingAnimation:scrollView];
+  [(id<UIScrollViewDelegate>)[_listAdapter performSelector:@selector(delegateProxy)] scrollViewDidEndScrollingAnimation:scrollView];
 }
 
 - (BOOL)shouldBatchFetchForCollectionNode:(ASCollectionNode *)collectionNode
