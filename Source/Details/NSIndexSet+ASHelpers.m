@@ -6,13 +6,9 @@
 //  Copyright © 2016 Facebook. All rights reserved.
 //
 
-#import <AsyncDisplayKit/ASAvailability.h>
 
-#if AS_TARGET_OS_IOS
-  #import <UIKit/UIKit.h>
-#else
-  #import <Cocoa/Cocoa.h>
-#endif
+// UIKit indexPath helpers
+#import <UIKit/UIKit.h>
 
 #import <AsyncDisplayKit/NSIndexSet+ASHelpers.h>
 

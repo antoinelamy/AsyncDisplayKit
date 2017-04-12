@@ -23,9 +23,6 @@
 #define AS_AT_LEAST_IOS9   (kCFCoreFoundationVersionNumber >= kCFCoreFoundationVersionNumber_iOS_9_0)
 #define AS_AT_LEAST_IOS10  (kCFCoreFoundationVersionNumber >= kCFCoreFoundationVersionNumber_iOS_10_0)
 
-#define AS_TARGET_OS_OSX (!(TARGET_OS_IOS || TARGET_OS_TV || TARGET_OS_WATCH))
-#define AS_TARGET_OS_IOS TARGET_OS_IPHONE
-
 // If Yoga is available, make it available anywhere we use ASAvailability.
 // This reduces Yoga-specific code in other files.
 #ifndef YOGA_HEADER_PATH
@@ -36,45 +33,11 @@
   #define YOGA __has_include(YOGA_HEADER_PATH)
 #endif
 
-#if AS_TARGET_OS_OSX
+#define AS_PIN_REMOTE_IMAGE __has_include(<PINRemoteImage/PINRemoteImage.h>)
+#define AS_IG_LIST_KIT __has_include(<IGListKit/IGListKit.h>)
 
-#define UIEdgeInsets NSEdgeInsets
-#define NSStringFromCGSize NSStringFromSize
-#define NSStringFromCGPoint NSStringFromPoint
-
-#import <Foundation/Foundation.h>
-
-@interface NSValue (ASAvailability)
-+ (NSValue *)valueWithCGPoint:(CGPoint)point;
-+ (NSValue *)valueWithCGSize:(CGSize)size;
-- (CGRect)CGRectValue;
-- (CGPoint)CGPointValue;
-- (CGSize)CGSizeValue;
-@end
-
-@implementation NSValue(ASAvailability)
-+ (NSValue *)valueWithCGPoint:(CGPoint)point
-{
-  return [self valueWithPoint:point];
-}
-+ (NSValue *)valueWithCGSize:(CGSize)size
-{
-  return [self valueWithSize:size];
-}
-- (CGRect)CGRectValue
-{
-  return self.rectValue;
-}
-
-- (CGPoint)CGPointValue
-{
-  return self.pointValue;
-}
-
-- (CGSize)CGSizeValue
-{
-  return self.sizeValue;
-}
-@end
-
-#endif
+/**
+ * For IGListKit versions < 3.0, you have to use IGListCollectionView.
+ * For 3.0 and later, that class is removed and you use UICollectionView.
+ */
+#define IG_LIST_COLLECTION_VIEW __has_include(<IGListKit/IGListCollectionView.h>)

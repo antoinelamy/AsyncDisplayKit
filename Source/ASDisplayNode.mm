@@ -38,19 +38,6 @@
 #import <AsyncDisplayKit/ASWeakProxy.h>
 #import <AsyncDisplayKit/ASResponderChainEnumerator.h>
 
-/**
- * Assert if the current thread owns a mutex.
- * This assertion is useful when you want to indicate and enforce the locking policy/expectation of methods.
- * To determine when and which methods acquired a (recursive) mutex (to debug deadlocks, for example), 
- * put breakpoints at some of these assertions. When the breakpoints hit, walk through stack trace frames 
- * and check ownership count of the mutex.
- */
-#if CHECK_LOCKING_SAFETY
-  #define ASDisplayNodeAssertLockUnownedByCurrentThread(lock) ASDisplayNodeAssertFalse(lock.ownedByCurrentThread())
-#else
-  #define ASDisplayNodeAssertLockUnownedByCurrentThread(lock)
-#endif
-
 #if ASDisplayNodeLoggingEnabled
   #define LOG(...) NSLog(__VA_ARGS__)
 #else
@@ -316,12 +303,11 @@ static ASDisplayNodeMethodOverrides GetASDisplayNodeMethodOverrides(Class c)
 
 - (instancetype)initWithViewClass:(Class)viewClass
 {
-  if (!(self = [super init]))
+  if (!(self = [self init]))
     return nil;
 
   ASDisplayNodeAssert([viewClass isSubclassOfClass:[UIView class]], @"should initialize with a subclass of UIView");
 
-  [self _initializeInstance];
   _viewClass = viewClass;
   _flags.synchronous = ![viewClass isSubclassOfClass:[_ASDisplayView class]];
 
@@ -330,13 +316,12 @@ static ASDisplayNodeMethodOverrides GetASDisplayNodeMethodOverrides(Class c)
 
 - (instancetype)initWithLayerClass:(Class)layerClass
 {
-  if (!(self = [super init])) {
+  if (!(self = [self init])) {
     return nil;
   }
 
   ASDisplayNodeAssert([layerClass isSubclassOfClass:[CALayer class]], @"should initialize with a subclass of CALayer");
 
-  [self _initializeInstance];
   _layerClass = layerClass;
   _flags.synchronous = ![layerClass isSubclassOfClass:[_ASDisplayLayer class]];
   _flags.layerBacked = YES;
@@ -346,26 +331,18 @@ static ASDisplayNodeMethodOverrides GetASDisplayNodeMethodOverrides(Class c)
 
 - (instancetype)initWithViewBlock:(ASDisplayNodeViewBlock)viewBlock
 {
-  return [self _initWithViewBlock:viewBlock didLoadBlock:nil];
-}
-- (instancetype)initWithViewBlock:(ASDisplayNodeViewBlock)viewBlock didLoadBlock:(ASDisplayNodeDidLoadBlock)didLoadBlock
-{
-  return [self _initWithViewBlock:viewBlock didLoadBlock:didLoadBlock];
+  return [self initWithViewBlock:viewBlock didLoadBlock:nil];
 }
 
-- (instancetype)_initWithViewBlock:(ASDisplayNodeViewBlock)viewBlock didLoadBlock:(ASDisplayNodeDidLoadBlock)didLoadBlock
+- (instancetype)initWithViewBlock:(ASDisplayNodeViewBlock)viewBlock didLoadBlock:(ASDisplayNodeDidLoadBlock)didLoadBlock
 {
-  if (!(self = [super init])) {
+  if (!(self = [self init])) {
     return nil;
   }
-  
-  ASDisplayNodeAssertNotNil(viewBlock, @"should initialize with a valid block that returns a UIView");
-  
-  [self _initializeInstance];
-  _viewBlock = viewBlock;
-  _flags.synchronous = YES;
+
+  [self setViewBlock:viewBlock];
   if (didLoadBlock != nil) {
-    _onDidLoadBlocks = [NSMutableArray arrayWithObject:didLoadBlock];
+    [self onDidLoad:didLoadBlock];
   }
   
   return self;
@@ -373,31 +350,40 @@ static ASDisplayNodeMethodOverrides GetASDisplayNodeMethodOverrides(Class c)
 
 - (instancetype)initWithLayerBlock:(ASDisplayNodeLayerBlock)layerBlock
 {
-  return [self _initWithLayerBlock:layerBlock didLoadBlock:nil];
+  return [self initWithLayerBlock:layerBlock didLoadBlock:nil];
 }
 
 - (instancetype)initWithLayerBlock:(ASDisplayNodeLayerBlock)layerBlock didLoadBlock:(ASDisplayNodeDidLoadBlock)didLoadBlock
 {
-  return [self _initWithLayerBlock:layerBlock didLoadBlock:didLoadBlock];
-}
-
-- (instancetype)_initWithLayerBlock:(ASDisplayNodeLayerBlock)layerBlock didLoadBlock:(ASDisplayNodeDidLoadBlock)didLoadBlock
-{
-  if (!(self = [super init])) {
+  if (!(self = [self init])) {
     return nil;
   }
   
-  ASDisplayNodeAssertNotNil(layerBlock, @"should initialize with a valid block that returns a CALayer");
-  
-  [self _initializeInstance];
-  _layerBlock = layerBlock;
-  _flags.synchronous = YES;
-  _flags.layerBacked = YES;
+  [self setLayerBlock:layerBlock];
   if (didLoadBlock != nil) {
-    _onDidLoadBlocks = [NSMutableArray arrayWithObject:didLoadBlock];
+    [self onDidLoad:didLoadBlock];
   }
   
   return self;
+}
+
+- (void)setViewBlock:(ASDisplayNodeViewBlock)viewBlock
+{
+  ASDisplayNodeAssertFalse(self.nodeLoaded);
+  ASDisplayNodeAssertNotNil(viewBlock, @"should initialize with a valid block that returns a UIView");
+
+  _viewBlock = viewBlock;
+  _flags.synchronous = YES;
+}
+
+- (void)setLayerBlock:(ASDisplayNodeLayerBlock)layerBlock
+{
+  ASDisplayNodeAssertFalse(self.nodeLoaded);
+  ASDisplayNodeAssertNotNil(layerBlock, @"should initialize with a valid block that returns a CALayer");
+
+  _layerBlock = layerBlock;
+  _flags.synchronous = YES;
+  _flags.layerBacked = YES;
 }
 
 - (void)onDidLoad:(ASDisplayNodeDidLoadBlock)body
@@ -1305,13 +1291,18 @@ ASLayoutElementFinalLayoutElementDefault
 - (void)_setCalculatedDisplayNodeLayout:(std::shared_ptr<ASDisplayNodeLayout>)displayNodeLayout
 {
   ASDN::MutexLocker l(__instanceLock__);
-  
+  [self _locked_setCalculatedDisplayNodeLayout:displayNodeLayout];
+}
+
+- (void)_locked_setCalculatedDisplayNodeLayout:(std::shared_ptr<ASDisplayNodeLayout>)displayNodeLayout
+{
   ASDisplayNodeAssertTrue(displayNodeLayout->layout.layoutElement == self);
   ASDisplayNodeAssertTrue(displayNodeLayout->layout.size.width >= 0.0);
   ASDisplayNodeAssertTrue(displayNodeLayout->layout.size.height >= 0.0);
   
   _calculatedDisplayNodeLayout = displayNodeLayout;
 }
+
 
 - (CGSize)calculatedSize
 {
@@ -1414,19 +1405,26 @@ ASLayoutElementFinalLayoutElementDefault
 
 - (void)layout
 {
-  ASDisplayNodeAssertMainThread();
-  ASDisplayNodeAssertLockUnownedByCurrentThread(__instanceLock__);
-
-  ASDN::MutexLocker l(__instanceLock__);
-  if (! _calculatedDisplayNodeLayout->isDirty()) {
-    [self _locked_layoutSublayouts];
-  }
+  [self _layoutSublayouts];
 }
 
-- (void)_locked_layoutSublayouts
+- (void)_layoutSublayouts
 {
-  ASLayout *layout = _calculatedDisplayNodeLayout->layout;
-  for (ASDisplayNode *node in _subnodes) {
+  ASDisplayNodeAssertMainThread();
+  ASDisplayNodeAssertLockUnownedByCurrentThread(__instanceLock__);
+  
+  ASLayout *layout;
+  NSArray<ASDisplayNode *> *subnodes;
+  {
+    ASDN::MutexLocker l(__instanceLock__);
+    if (_calculatedDisplayNodeLayout->isDirty() || _subnodes.count == 0) {
+      return;
+    }
+    layout = _calculatedDisplayNodeLayout->layout;
+    subnodes = [_subnodes copy];
+  }
+  
+  for (ASDisplayNode *node in subnodes) {
     CGRect frame = [layout frameForElement:node];
     if (CGRectIsNull(frame)) {
       // There is no frame for this node in our layout.
@@ -1533,22 +1531,35 @@ ASLayoutElementFinalLayoutElementDefault
     }
     
     ASPerformBlockOnMainThread(^{
-      // Grab __instanceLock__ here to make sure this transition isn't invalidated
-      // right after it passed the validation test and before it proceeds
-      ASDN::MutexLocker l(__instanceLock__);
-
-      if ([self _shouldAbortTransitionWithID:transitionID]) {
-        return;
+      ASLayoutTransition *pendingLayoutTransition;
+      _ASTransitionContext *pendingLayoutTransitionContext;
+      {
+        // Grab __instanceLock__ here to make sure this transition isn't invalidated
+        // right after it passed the validation test and before it proceeds
+        ASDN::MutexLocker l(__instanceLock__);
+        
+        if ([self _locked_shouldAbortTransitionWithID:transitionID]) {
+          return;
+        }
+        
+        // Update calculated layout
+        auto previousLayout = _calculatedDisplayNodeLayout;
+        auto pendingLayout = std::make_shared<ASDisplayNodeLayout>(
+                                                                   newLayout,
+                                                                   constrainedSize,
+                                                                   constrainedSize.max
+                                                                   );
+        [self _locked_setCalculatedDisplayNodeLayout:pendingLayout];
+        
+        // Setup pending layout transition for animation
+        _pendingLayoutTransition = pendingLayoutTransition = [[ASLayoutTransition alloc] initWithNode:self
+                                                                                        pendingLayout:pendingLayout
+                                                                                       previousLayout:previousLayout];
+        // Setup context for pending layout transition. we need to hold a strong reference to the context
+        _pendingLayoutTransitionContext = pendingLayoutTransitionContext = [[_ASTransitionContext alloc] initWithAnimation:animated
+                                                                                                            layoutDelegate:_pendingLayoutTransition
+                                                                                                        completionDelegate:self];
       }
-
-      // Update calculated layout
-      auto previousLayout = _calculatedDisplayNodeLayout;
-      auto pendingLayout = std::make_shared<ASDisplayNodeLayout>(
-        newLayout,
-        constrainedSize,
-        constrainedSize.max
-      );
-      [self _setCalculatedDisplayNodeLayout:pendingLayout];
       
       // Apply complete layout transitions for all subnodes
       ASDisplayNodePerformBlockOnEverySubnode(self, NO, ^(ASDisplayNode * _Nonnull node) {
@@ -1563,20 +1574,11 @@ ASLayoutElementFinalLayoutElementDefault
         completion();
       }
       
-      // Setup pending layout transition for animation
-      _pendingLayoutTransition = [[ASLayoutTransition alloc] initWithNode:self
-                                                            pendingLayout:pendingLayout
-                                                           previousLayout:previousLayout];
-      // Setup context for pending layout transition. we need to hold a strong reference to the context
-      _pendingLayoutTransitionContext = [[_ASTransitionContext alloc] initWithAnimation:animated
-                                                                         layoutDelegate:_pendingLayoutTransition
-                                                                     completionDelegate:self];
-      
       // Apply the subnode insertion immediately to be able to animate the nodes
-      [_pendingLayoutTransition applySubnodeInsertions];
+      [pendingLayoutTransition applySubnodeInsertions];
       
       // Kick off animating the layout transition
-      [self animateLayoutTransition:_pendingLayoutTransitionContext];
+      [self animateLayoutTransition:pendingLayoutTransitionContext];
       
       // Mark transaction as finished
       [self _finishOrCancelTransition];
@@ -1662,6 +1664,11 @@ ASLayoutElementFinalLayoutElementDefault
 - (BOOL)_shouldAbortTransitionWithID:(int32_t)transitionID
 {
   ASDN::MutexLocker l(__instanceLock__);
+  return [self _locked_shouldAbortTransitionWithID:transitionID];
+}
+
+- (BOOL)_locked_shouldAbortTransitionWithID:(int32_t)transitionID
+{
   return (!_transitionInProgress || _transitionID != transitionID);
 }
 
@@ -1710,10 +1717,7 @@ ASLayoutElementFinalLayoutElementDefault
 - (void)animateLayoutTransition:(id<ASContextTransitioning>)context
 {
   if ([context isAnimated] == NO) {
-    __instanceLock__.lock();
-    [self _locked_layoutSublayouts];
-    __instanceLock__.unlock();
-
+    [self _layoutSublayouts];
     [context completeTransition:YES];
     return;
   }
@@ -2066,7 +2070,8 @@ NSString * const ASRenderingEngineDidDisplayNodesScheduledBeforeTimestamp = @"AS
   static ASRunLoopQueue<ASDisplayNode *> *renderQueue;
   dispatch_once(&onceToken, ^{
     renderQueue = [[ASRunLoopQueue<ASDisplayNode *> alloc] initWithRunLoop:CFRunLoopGetMain()
-                                                                andHandler:^(ASDisplayNode * _Nonnull dequeuedItem, BOOL isQueueDrained) {
+                                                             retainObjects:NO
+                                                                   handler:^(ASDisplayNode * _Nonnull dequeuedItem, BOOL isQueueDrained) {
       [dequeuedItem _recursivelyTriggerDisplayAndBlock:NO];
       if (isQueueDrained) {
         CFTimeInterval timestamp = CACurrentMediaTime();

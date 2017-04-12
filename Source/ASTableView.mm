@@ -14,7 +14,6 @@
 #import <AsyncDisplayKit/_ASDisplayLayer.h>
 #import <AsyncDisplayKit/_ASHierarchyChangeSet.h>
 #import <AsyncDisplayKit/ASAssert.h>
-#import <AsyncDisplayKit/ASAvailability.h>
 #import <AsyncDisplayKit/ASBatchFetching.h>
 #import <AsyncDisplayKit/ASCellNode+Internal.h>
 #import <AsyncDisplayKit/ASCollectionElement.h>
@@ -121,10 +120,6 @@ static NSString * const kCellReuseIdentifier = @"_ASTableViewCell";
 #pragma mark -
 #pragma mark ASTableView
 
-@interface ASTableNode ()
-- (instancetype)_initWithTableView:(ASTableView *)tableView;
-@end
-
 @interface ASTableView () <ASRangeControllerDataSource, ASRangeControllerDelegate, ASDataControllerSource, _ASTableViewCellDelegate, ASCellNodeInteractionDelegate, ASDelegateProxyInterceptor, ASBatchFetchingScrollView, ASDataControllerEnvironmentDelegate>
 {
   ASTableViewProxy *_proxyDataSource;
@@ -186,6 +181,7 @@ static NSString * const kCellReuseIdentifier = @"_ASTableViewCell";
     unsigned int scrollViewWillBeginDragging:1;
     unsigned int scrollViewDidEndDragging:1;
     unsigned int scrollViewWillEndDragging:1;
+    unsigned int scrollViewDidEndDecelerating:1;
     unsigned int tableNodeWillDisplayNodeForRow:1;
     unsigned int tableViewWillDisplayNodeForRow:1;
     unsigned int tableViewWillDisplayNodeForRowDeprecated:1;
@@ -288,7 +284,7 @@ static NSString * const kCellReuseIdentifier = @"_ASTableViewCell";
   
   _proxyDataSource = [[ASTableViewProxy alloc] initWithTarget:nil interceptor:self];
   super.dataSource = (id<UITableViewDataSource>)_proxyDataSource;
-
+  
   [self registerClass:_ASTableViewCell.class forCellReuseIdentifier:kCellReuseIdentifier];
 }
 
@@ -436,6 +432,7 @@ static NSString * const kCellReuseIdentifier = @"_ASTableViewCell";
     _asyncDelegateFlags.tableViewDidEndDisplayingNodeForRow = [_asyncDelegate respondsToSelector:@selector(tableView:didEndDisplayingNode:forRowAtIndexPath:)];
     _asyncDelegateFlags.tableNodeDidEndDisplayingNodeForRow = [_asyncDelegate respondsToSelector:@selector(tableNode:didEndDisplayingRowWithNode:)];
     _asyncDelegateFlags.scrollViewWillEndDragging = [_asyncDelegate respondsToSelector:@selector(scrollViewWillEndDragging:withVelocity:targetContentOffset:)];
+    _asyncDelegateFlags.scrollViewDidEndDecelerating = [_asyncDelegate respondsToSelector:@selector(scrollViewDidEndDecelerating:)];
     _asyncDelegateFlags.tableViewWillBeginBatchFetch = [_asyncDelegate respondsToSelector:@selector(tableView:willBeginBatchFetchWithContext:)];
     _asyncDelegateFlags.tableNodeWillBeginBatchFetch = [_asyncDelegate respondsToSelector:@selector(tableNode:willBeginBatchFetchWithContext:)];
     _asyncDelegateFlags.shouldBatchFetchForTableView = [_asyncDelegate respondsToSelector:@selector(shouldBatchFetchForTableView:)];
@@ -482,6 +479,11 @@ static NSString * const kCellReuseIdentifier = @"_ASTableViewCell";
 - (void)reloadDataWithCompletion:(void (^)())completion
 {
   ASDisplayNodeAssertMainThread();
+  
+  if (! _dataController.initialReloadDataHasBeenCalled) {
+    // If this is the first reload, forward to super immediately to prevent it from triggering more "initial" loads while our data controller is working. 
+    [super reloadData];
+  }
   
   void (^batchUpdatesCompletion)(BOOL);
   if (completion) {
@@ -688,9 +690,11 @@ static NSString * const kCellReuseIdentifier = @"_ASTableViewCell";
   [_changeSet addCompletionHandler:completion];
 
   if (_batchUpdateCount == 0) {
-    _changeSet.animated = animated;
-    [_dataController updateWithChangeSet:_changeSet];
+    _ASHierarchyChangeSet *changeSet = _changeSet;
+    // Nil out _changeSet before forwarding to _dataController to allow the change set to cause subsequent batch updates on the same run loop
     _changeSet = nil;
+    changeSet.animated = animated;
+    [_dataController updateWithChangeSet:changeSet];
   } 
 }
 
@@ -1197,6 +1201,15 @@ static NSString * const kCellReuseIdentifier = @"_ASTableViewCell";
   }
 }
 
+- (void)scrollViewDidEndDecelerating:(UIScrollView *)scrollView
+{
+  _deceleratingVelocity = CGPointZero;
+
+  if (_asyncDelegateFlags.scrollViewDidEndDecelerating) {
+      [_asyncDelegate scrollViewDidEndDecelerating:scrollView];
+  }
+}
+
 - (void)scrollViewWillBeginDragging:(UIScrollView *)scrollView
 {
   for (_ASTableViewCell *tableViewCell in _cellsForVisibilityUpdates) {
@@ -1542,7 +1555,7 @@ static NSString * const kCellReuseIdentifier = @"_ASTableViewCell";
   [changeSet executeCompletionHandlerWithFinished:YES];
 }
 
-#pragma mark - ASDataControllerDelegate
+#pragma mark - ASDataControllerSource
 
 - (ASCellNodeBlock)dataController:(ASDataController *)dataController nodeBlockAtIndexPath:(NSIndexPath *)indexPath {
   ASCellNodeBlock block = nil;

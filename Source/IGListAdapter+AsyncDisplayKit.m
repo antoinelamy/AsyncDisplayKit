@@ -6,7 +6,9 @@
 //  Copyright © 2017 Facebook. All rights reserved.
 //
 
-#if IG_LIST_KIT
+#import <AsyncDisplayKit/ASAvailability.h>
+
+#if AS_IG_LIST_KIT
 
 #import "IGListAdapter+AsyncDisplayKit.h"
 #import "ASIGListAdapterBasedDataSource.h"
@@ -36,12 +38,15 @@
   collectionNode.delegate = dataSource;
   __weak IGListAdapter *weakSelf = self;
   [collectionNode onDidLoad:^(__kindof ASCollectionNode * _Nonnull collectionNode) {
-    // We manually set the superclass of ASCollectionView to IGListCollectionView at runtime.
-    // Issue tracked at https://github.com/Instagram/IGListKit/issues/409
+#if IG_LIST_COLLECTION_VIEW
+    // We manually set the superclass of ASCollectionView to IGListCollectionView at runtime if needed.
     weakSelf.collectionView = (IGListCollectionView *)collectionNode.view;
+#else
+    weakSelf.collectionView = collectionNode.view;
+#endif
   }];
 }
 
 @end
 
-#endif // IG_LIST_KIT
+#endif // AS_IG_LIST_KIT

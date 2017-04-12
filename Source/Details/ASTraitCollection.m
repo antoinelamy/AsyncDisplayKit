@@ -10,10 +10,8 @@
 //  of patent rights can be found in the PATENTS file in the same directory.
 //
 
+#import <AsyncDisplayKit/ASAvailability.h>
 #import <AsyncDisplayKit/ASTraitCollection.h>
-
-#if AS_TARGET_OS_IOS
-
 #import <AsyncDisplayKit/ASObjectDescriptionHelpers.h>
 #import <AsyncDisplayKit/ASLayoutElement.h>
 
@@ -196,9 +194,3 @@ NSString *NSStringFromASPrimitiveTraitCollection(ASPrimitiveTraitCollection trai
 }
 
 @end
-
-#else
-
-// Non iOS
-
-#endif

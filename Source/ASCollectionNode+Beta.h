@@ -10,13 +10,30 @@
 
 #import <AsyncDisplayKit/ASCollectionNode.h>
 
-@protocol ASCollectionViewLayoutFacilitatorProtocol;
+@protocol ASCollectionViewLayoutFacilitatorProtocol, ASCollectionLayoutDelegate;
+@class ASElementMap;
 
 NS_ASSUME_NONNULL_BEGIN
 
 @interface ASCollectionNode (Beta)
 
+/**
+ * Allows providing a custom subclass of ASCollectionView to be managed by ASCollectionNode.
+ *
+ * @default [ASCollectionView class] is used whenever this property is unset or nil.
+ */
+@property (strong, nonatomic, nullable) Class collectionViewClass;
+
+/**
+ * The elements that are currently displayed. The "UIKit index space". Must be accessed on main thread.
+ */
+@property (strong, nonatomic, readonly) ASElementMap *visibleElements;
+
+@property (strong, readonly, nullable) id<ASCollectionLayoutDelegate> layoutDelegate;
+
 - (instancetype)initWithFrame:(CGRect)frame collectionViewLayout:(UICollectionViewLayout *)layout layoutFacilitator:(nullable id<ASCollectionViewLayoutFacilitatorProtocol>)layoutFacilitator;
+
+- (instancetype)initWithLayoutDelegate:(id<ASCollectionLayoutDelegate>)layoutDelegate layoutFacilitator:(nullable id<ASCollectionViewLayoutFacilitatorProtocol>)layoutFacilitator;
 
 - (void)beginUpdates ASDISPLAYNODE_DEPRECATED_MSG("Use -performBatchUpdates:completion: instead.");
 

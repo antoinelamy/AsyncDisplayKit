@@ -8,6 +8,7 @@
 //  of patent rights can be found in the PATENTS file in the same directory.
 //
 
+#import <AsyncDisplayKit/ASAvailability.h>
 #import <AsyncDisplayKit/ASDisplayNode.h>
 #import <AsyncDisplayKit/ASDisplayNode+Convenience.h>
 #import <AsyncDisplayKit/ASDisplayNodeExtras.h>
@@ -37,9 +38,15 @@
 #import <AsyncDisplayKit/ASCellNode.h>
 #import <AsyncDisplayKit/ASSectionContext.h>
 
+#import <AsyncDisplayKit/ASElementMap.h>
+#import <AsyncDisplayKit/ASCollectionLayoutContext.h>
+#import <AsyncDisplayKit/ASCollectionLayoutState.h>
+#import <AsyncDisplayKit/ASCollectionFlowLayoutDelegate.h>
+
 #import <AsyncDisplayKit/ASSectionController.h>
 #import <AsyncDisplayKit/ASSupplementaryNodeSource.h>
-#if IG_LIST_KIT
+
+#if AS_IG_LIST_KIT
 #import <AsyncDisplayKit/IGListAdapter+AsyncDisplayKit.h>
 #import <AsyncDisplayKit/AsyncDisplayKit+IGListKitMethods.h>
 #endif
@@ -81,7 +88,6 @@
 #import <AsyncDisplayKit/ASDisplayNode+Beta.h>
 #import <AsyncDisplayKit/ASTextNode+Beta.h>
 #import <AsyncDisplayKit/ASTextNodeTypes.h>
-#import <AsyncDisplayKit/ASAvailability.h>
 #import <AsyncDisplayKit/ASBlockTypes.h>
 #import <AsyncDisplayKit/ASContextTransitioning.h>
 #import <AsyncDisplayKit/ASControlNode+Subclasses.h>
